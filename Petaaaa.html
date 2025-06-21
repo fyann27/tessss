@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TPS 3R Kabupaten Bantul - Sistem Informasi Geografis Terapan</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        /* ----- Global reset & layout ----------------------------------------------------------- */
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);height:100vh;overflow:hidden}
+        .container{display:flex;height:100vh;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+
+        /* ----- Sidebar ------------------------------------------------------------------------- */
+        .sidebar{width:400px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-right:1px solid rgba(255,255,255,.2);display:flex;flex-direction:column;overflow-y:auto}
+        .header{background:linear-gradient(135deg,#2c3e50 0%,#3498db 100%);color:#fff;padding:20px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+        .header h1{font-size:24px;margin-bottom:5px;font-weight:700}
+        .header p{font-size:14px;opacity:.9}
+
+        .search-section{padding:20px;border-bottom:1px solid rgba(0,0,0,.1)}
+        .search-title{font-size:18px;font-weight:600;margin-bottom:15px;color:#2c3e50;display:flex;align-items:center;gap:10px}
+        .search-box{position:relative;margin-bottom:15px}
+        .search-input{width:100%;padding:12px 15px 12px 45px;border:2px solid #e0e0e0;border-radius:25px;font-size:14px;transition:.3s;background:#fff}
+        .search-input:focus{outline:none;border-color:#3498db;box-shadow:0 0 0 3px rgba(52,152,219,.1)}
+        .search-icon{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:#7f8c8d}
+
+        .button{width:100%;padding:12px 20px;background:linear-gradient(135deg,#3498db 0%,#2980b9 100%);color:#fff;border:none;border-radius:25px;font-size:14px;font-weight:600;cursor:pointer;transition:.3s;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px}
+        .button:hover{transform:translateY(-2px);box-shadow:0 5px 15px rgba(52,152,219,.3)}
+        .button.danger{background:linear-gradient(135deg,#e74c3c 0%,#c0392b 100%)}
+        .button.danger:hover{box-shadow:0 5px 15px rgba(231,76,60,.3)}
+
+        .info-section{padding:20px;flex:1}
+        .tpst-list{margin-top:20px}
+        .tpst-item{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:15px;margin-bottom:15px;transition:.3s;cursor:pointer}
+        .tpst-item:hover{transform:translateY(-2px);box-shadow:0 5px 15px rgba(0,0,0,.1);border-color:#3498db}
+        .tpst-name{font-weight:600;color:#2c3e50;margin-bottom:5px}
+        .tpst-details{font-size:12px;color:#7f8c8d;display:flex;flex-direction:column;gap:3px}
+        .status-badge{display:inline-block;padding:4px 8px;border-radius:12px;font-size:10px;font-weight:600;text-transform:uppercase;margin-top:5px}
+        .status-aktif{background:#d5f4e6;color:#27ae60}
+        .status-pembangunan{background:#fef9e7;color:#f1c40f}
+
+        /* ----- Map ----------------------------------------------------------------------------- */
+        .map-container{flex:1;position:relative}
+        #map{width:100%;height:100%}
+        .route-info{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);padding:15px;border-radius:10px;box-shadow:0 5px 15px rgba(0,0,0,.1);max-width:300px;z-index:1000;display:none}
+        .route-info.show{display:block}
+        .route-title{font-weight:600;color:#2c3e50;margin-bottom:10px}
+        .route-details{font-size:14px;color:#7f8c8d}
+        .popup-content{text-align:center;font-size:14px}
+        .popup-title{font-weight:600;color:#2c3e50;margin-bottom:8px}
+        .popup-details{color:#7f8c8d;line-height:1.4}
+
+        /* ----- Loading ------------------------------------------------------------------------- */
+        .loading{display:none;text-align:center;padding:20px;color:#7f8c8d}
+        .loading.show{display:block}
+        .spinner{border:2px solid #f3f3f3;border-top:2px solid #3498db;border-radius:50%;width:20px;height:20px;animation:spin 1s linear infinite;display:inline-block;margin-right:10px}
+        @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+
+        /* ----- Responsive ---------------------------------------------------------------------- */
+        @media(max-width:768px){.container{flex-direction:column}.sidebar{width:100%;height:40vh}.map-container{height:60vh}}
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- ===== Sidebar =================================================================== -->
+    <div class="sidebar">
+        <div class="header">
+            <h1><i class="fas fa-recycle"></i> TPS 3R Bantul</h1>
+            <p>Sistem Informasi Geografis Terapan</p>
+        </div>
+
+        <!-- ==== Pencarian lokasi --------------------------------------------------------- -->
+        <div class="search-section">
+            <div class="search-title"><i class="fas fa-search"></i>Pencarian Lokasi</div>
+            <div class="search-box">
+                <i class="fas fa-map-marker-alt search-icon"></i>
+                <input type="text" id="searchLocation" class="search-input" placeholder="Masukkan alamat atau kecamatan...">
+            </div>
+            <button class="button" onclick="searchLocation()"><i class="fas fa-search"></i>Cari Lokasi</button>
+        </div>
+
+        <!-- ==== Pencarian rute ------------------------------------------------------------ -->
+        <div class="search-section">
+            <div class="search-title"><i class="fas fa-route"></i>Pencarian Rute</div>
+            <div class="search-box">
+                <i class="fas fa-crosshairs search-icon"></i>
+                <input type="text" id="startPoint" class="search-input" placeholder="Klik peta untuk memilih titik awal" readonly>
+            </div>
+            <button class="button" onclick="findRoute()" id="routeBtn" disabled><i class="fas fa-directions"></i>Cari Rute Terdekat</button>
+            <button class="button danger" onclick="clearRoute()"><i class="fas fa-times"></i>Hapus Rute</button>
+        </div>
+
+        <div class="loading" id="loading"><div class="spinner"></div>Memproses...</div>
+
+        <!-- ==== Daftar TPST ---------------------------------------------------------------- -->
+        <div class="info-section">
+            <div class="search-title"><i class="fas fa-building"></i>Daftar TPST</div>
+            <div class="tpst-list" id="tpstList"></div>
+        </div>
+    </div>
+
+    <!-- ===== Map Container =============================================================== -->
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="route-info" id="routeInfo">
+            <div class="route-title">Informasi Rute</div>
+            <div class="route-details" id="routeDetails"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/* -------------------------------------------------------------------------
+ * DATA GEOJSON (contoh sederhana — ganti dengan data sebenarnya jika perlu)
+ * ---------------------------------------------------------------------- */
+const geoJsonData={
+  "type":"FeatureCollection",
+  "features":[
+    {"type":"Feature","properties":{"name":"TPST Modalan","kecamatan":"Banguntapan","kapasitas":49,"status":"Aktif"},"geometry":{"type":"Polygon","coordinates":[[[110.4144,-7.8399],[110.4144,-7.8379],[110.4164,-7.8379],[110.4164,-7.8399],[110.4144,-7.8399]]]}},
+    {"type":"Feature","properties":{"name":"TPST Dingkikan","kecamatan":"Sedayu","kapasitas":20,"status":"Aktif"},"geometry":{"type":"Polygon","coordinates":[[[110.2885,-7.8457],[110.2885,-7.8437],[110.2905,-7.8437],[110.2905,-7.8457],[110.2885,-7.8457]]]}},
+    {"type":"Feature","properties":{"name":"ITF Pasar Niten","kecamatan":"Kasihan","kapasitas":8,"status":"Aktif"},"geometry":{"type":"Polygon","coordinates":[[[110.3372,-7.8285],[110.3372,-7.8265],[110.3392,-7.8265],[110.3392,-7.8285],[110.3372,-7.8285]]]}},
+    {"type":"Feature","properties":{"name":"ITF Bawuran","kecamatan":"Pleret","kapasitas":100,"status":"Dalam pembangunan"},"geometry":{"type":"Polygon","coordinates":[[[110.4228,-7.8935],[110.4228,-7.8915],[110.4248,-7.8915],[110.4248,-7.8935],[110.4228,-7.8935]]]}}
+  ]
+};
+
+/* -------------------------------------------------------------------------
+ * INISIALISASI PETA
+ * ---------------------------------------------------------------------- */
+const map=L.map('map').setView([-7.85,110.35],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);
+
+let startMarker=null;      // penanda titik awal
+let routeLayer=null;       // layer rute (dari OSRM)
+const tpstMarkers=[];      // menyimpan marker & properti tiap TPST
+
+// Dapatkan pusat polygon (rata‑rata koordinat simpul)
+function getPolygonCenter(coords){const c=coords[0];let lat=0,lng=0;for(let i=0;i<c.length-1;i++){lng+=c[i][0];lat+=c[i][1];}return[lat/(c.length-1),lng/(c.length-1)];}
+
+/* -------------------------------------------------------------------------
+ * TAMBAHKAN GEOJSON KE PETA + SIMPAN MARKER
+ * ---------------------------------------------------------------------- */
+L.geoJSON(geoJsonData,{
+  style:f=>({color:f.properties.status==='Aktif'?'#27ae60':'#f39c12',weight:2,opacity:.8,fillOpacity:.3}),
+  onEachFeature:(feature,layer)=>{
+    const p=feature.properties;
+    const html=`<div class="popup-content"><div class="popup-title">${p.name}</div><div class="popup-details"><strong>Kecamatan:</strong> ${p.kecamatan}<br><strong>Kapasitas:</strong> ${p.kapasitas} ton/hari<br><strong>Status:</strong> ${p.status}</div></div>`;
+    layer.bindPopup(html);
+    const center=getPolygonCenter(feature.geometry.coordinates);
+    const marker=L.marker(center).addTo(map).bindPopup(html);
+    tpstMarkers.push({marker,center,properties:p});
+  }
+}).addTo(map);
+
+/* -------------------------------------------------------------------------
+ * SIDEBAR: DAFTAR TPST
+ * ---------------------------------------------------------------------- */
+function populateTPSTList(){
+  const list=document.getElementById('tpstList');list.innerHTML='';
+  geoJsonData.features.forEach((f,i)=>{
+    const p=f.properties;const item=document.createElement('div');item.className='tpst-item';item.onclick=()=>focusOnTPST(i);
+    item.innerHTML=`<div class="tpst-name">${p.name}</div><div class="tpst-details"><span><i class="fas fa-map-marker-alt"></i> ${p.kecamatan}</span><span><i class="fas fa-weight-hanging"></i> Kapasitas: ${p.kapasitas} ton/hari</span></div><span class="status-badge ${p.status==='Aktif'?'status-aktif':'status-pembangunan'}">${p.status}</span>`;
+    list.appendChild(item);
+  });
+}
+function focusOnTPST(i){const f=geoJsonData.features[i];const center=getPolygonCenter(f.geometry.coordinates);map.setView(center,16);tpstMarkers[i].marker.openPopup();}
+
+/* -------------------------------------------------------------------------
+ * INTERAKSI PETA (pilih titik awal)
+ * ---------------------------------------------------------------------- */
+map.on('click',e=>{
+  if(startMarker)map.removeLayer(startMarker);
+  startMarker=L.marker(e.latlng,{icon:L.icon({iconUrl:'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM4LjEzIDIgNSA1LjEzIDUgOUM1IDE0LjI1IDEyIDIyIDEyIDIyQzEyIDIyIDE5IDE0LjI1IDE5IDlDMTkgNS4xMyAxNS44NyAyIDEyIDJaTTEyIDExLjVDMTAuNjIgMTEuNSA5LjUgMTAuMzggOS41IDlDOS41IDcuNjIgMTAuNjIgNi41IDEyIDYuNUMxMy4zOCA2LjUgMTQuNSA3LjYyIDE0LjUgOUMxNC41IDEwLjM4IDEzLjM4IDExLjUgMTIgMTEuNVoiIGZpbGw9IiNlNzRjM2MiLz48L3N2Zz4=',iconSize:[24,24],iconAnchor:[12,24]})}).addTo(map);
+  document.getElementById('startPoint').value=`${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+  document.getElementById('routeBtn').disabled=false;
+});
+
+/* -------------------------------------------------------------------------
+ * UTILITAS & LOADING
+ * ---------------------------------------------------------------------- */
+function showLoading(s){document.getElementById('loading').classList[s?'add':'remove']('show');}
+function calculateDistance(lat1,lon1,lat2,lon2){const R=6371;const dLat=(lat2-lat1)*Math.PI/180;const dLon=(lon2-lon1)*Math.PI/180;const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+
+/* -------------------------------------------------------------------------
+ * ROUTING SERVICE (OSRM public API)
+ * ---------------------------------------------------------------------- */
+async function getRoute(start,end){
+  // start & end = [lat,lng]
+  const url=`https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+  const res=await fetch(url);
+  if(!res.ok)throw new Error('Gagal mengambil rute');
+  const data=await res.json();
+  if(!data.routes||!data.routes.length)throw new Error('Rute tidak ditemukan');
+  return data.routes[0]; // mengembalikan object route
+}
+
+/* -------------------------------------------------------------------------
+ * CARI RUTE TERDEKAT KE TPST AKTIF
+ * ---------------------------------------------------------------------- */
+async function findRoute(){
+  if(!startMarker)return;
+  showLoading(true);
+  try{
+    const startPos=startMarker.getLatLng();
+    // temukan TPST aktif terdekat (hitung jarak lurus)
+    let nearest=null,dist=Infinity;
+    tpstMarkers.forEach(t=>{
+      if(t.properties.status==='Aktif'){
+        const d=calculateDistance(startPos.lat,startPos.lng,t.center[0],t.center[1]);
+        if(d<dist){dist=d;nearest=t;}
+      }
+    });
+    if(!nearest)throw new Error('Tidak ada TPST aktif');
+
+    // panggil OSRM routing service
+    const route=await getRoute([startPos.lat,startPos.lng],nearest.center);
+
+    // hapus rute lama
+    if(routeLayer)map.removeLayer(routeLayer);
+
+    // tampilkan rute geojson
+    routeLayer=L.geoJSON(route.geometry,{style:{color:'#e74c3c',weight:4,opacity:.9}}).addTo(map);
+
+    // sesuaikan tampilan peta
+    const group=L.featureGroup([startMarker,nearest.marker,routeLayer]);
+    map.fitBounds(group.getBounds().pad(.1));
+
+    // tampilkan info rute
+    showRouteInfo(nearest,route.distance,route.duration);
+  }catch(err){alert(err.message||'Terjadi kesalahan');}
+  showLoading(false);
+}
+
+/* -------------------------------------------------------------------------
+ * TAMPILKAN INFO RUTE DI SIDEBAR
+ * ---------------------------------------------------------------------- */
+function showRouteInfo(tpst,distance,duration){
+  const info=document.getElementById('routeInfo');
+  document.getElementById('routeDetails').innerHTML=`<strong>Tujuan:</strong> ${tpst.properties.name}<br><strong>Kecamatan:</strong> ${tpst.properties.kecamatan}<br><strong>Jarak:</strong> ${(distance/1000).toFixed(2)} km<br><strong>Estimasi Waktu:</strong> ${Math.ceil(duration/60)} menit<br><strong>Kapasitas:</strong> ${tpst.properties.kapasitas} ton/hari`;
+  info.classList.add('show');
+}
+
+/* -------------------------------------------------------------------------
+ * BERSIHKAN RUTE & PENANDA
+ * ---------------------------------------------------------------------- */
+function clearRoute(){
+  if(startMarker){map.removeLayer(startMarker);startMarker=null;}
+  if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}
+  document.getElementById('startPoint').value='';
+  document.getElementById('routeBtn').disabled=true;
+  document.getElementById('routeInfo').classList.remove('show');
+}
+
+/* -------------------------------------------------------------------------
+ * PENCARIAN LOKASI / TPST
+ * ---------------------------------------------------------------------- */
+function searchLocation(){
+  const query=document.getElementById('searchLocation').value.trim();
+  if(!query)return;
+  showLoading(true);
+  const kecamatanMap={'banguntapan':[-7.8389,110.4154],'sedayu':[-7.8447,110.2895],'kasihan':[-7.8275,110.3382],'pleret':[-7.8925,110.4238]};
+  const q=query.toLowerCase();let found=false;
+  for(const [k,coord] of Object.entries(kecamatanMap)){
+    if(q.includes(k)){map.setView(coord,14);found=true;break;}
+  }
+  if(!found){geoJsonData.features.forEach((f,i)=>{if(f.properties.name.toLowerCase().includes(q)||f.properties.kecamatan.toLowerCase().includes(q)){focusOnTPST(i);found=true;}});}
+  if(!found)alert('Lokasi tidak ditemukan. Coba kata kunci lain.');
+  showLoading(false);
+}
+
+document.getElementById('searchLocation').addEventListener('keypress',e=>{if(e.key==='Enter')searchLocation();});
+/* -------------------------------------------------------------------------
+ * INISIALISASI PERTAMA
+ * ---------------------------------------------------------------------- */
+populateTPSTList();
+</script>
+</body>
+</html>
